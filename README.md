@@ -17,10 +17,10 @@ A full-stack **face emotion recognition system** that performs:
 ![Home Demo](assets/home.png)
 
 ### 🔹 Image Upload Prediction  
-![Upload Demo](assets/upload.png)
+![Upload Demo](assets/upload_img.png)
 
 ### 🔹 Real-Time Webcam Mode  
-![Camera Demo](assets/web_camera.png)
+![Camera Demo](assets/web camera.png)
 
 *(You can replace these with real screenshots from your app.)*
 
