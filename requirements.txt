@@ -1,6 +1,12 @@
 streamlit
 torch>=2.7.1
 torchvision>=0.22.1
+opencv-python
 numpy>=1.26.4
+fastapi>=0.121.1
+uvicorn
+Pillow
+python-multipart==0.0.20
 
+# python 3.12.12
 

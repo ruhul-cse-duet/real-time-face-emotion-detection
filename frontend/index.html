@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <title>Face Emotion Detection</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      max-width: 900px;
+      margin: 20px auto;
+    }
+    h2 {
+      margin-top: 0;
+    }
+    section {
+      border: 1px solid #ddd;
+      padding: 15px;
+      margin-bottom: 20px;
+      border-radius: 8px;
+    }
+    video, canvas, img {
+      max-width: 480px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      display: block;
+      margin-top: 10px;
+    }
+    button {
+      margin-top: 10px;
+      padding: 6px 12px;
+      cursor: pointer;
+    }
+    #results {
+      margin-top: 10px;
+      font-size: 14px;
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <h1>Face Emotion Detection (FastAPI)</h1>
+
+  <!-- 🔹 Section 1: Image Upload Prediction -->
+  <section>
+    <h2>1. Predict Emotion from Uploaded Image</h2>
+    <input type="file" id="fileInput" accept="image/*" />
+    <br />
+    <button id="uploadBtn">Predict Image Emotion</button>
+
+    <h3>Uploaded Image (Annotated):</h3>
+    <img id="uploadResultImg" alt="Annotated result will appear here" />
+
+    <h3>Prediction JSON:</h3>
+    <div id="uploadResults"></div>
+  </section>
+
+  <!-- 🔹 Section 2: Realtime Webcam Prediction -->
+  <section>
+    <h2>2. Real-Time Webcam Emotion Detection</h2>
+    <button id="startCamBtn">Open Camera & Start</button>
+    <button id="stopCamBtn">Stop Camera</button>
+
+    <video id="video" autoplay playsinline></video>
+    <canvas id="canvas"></canvas>
+
+    <h3>Last Frame JSON:</h3>
+    <div id="realtimeResults"></div>
+  </section>
+
+  <script>
+    const API_URL = "http://127.0.0.1:8000/predict";
+
+    // ---------- Section 1: Image Upload ----------
+
+    const fileInput = document.getElementById("fileInput");
+    const uploadBtn = document.getElementById("uploadBtn");
+    const uploadResultImg = document.getElementById("uploadResultImg");
+    const uploadResults = document.getElementById("uploadResults");
+
+    uploadBtn.addEventListener("click", async () => {
+      if (!fileInput.files || fileInput.files.length === 0) {
+        alert("Please select an image first.");
+        return;
+      }
+
+      const file = fileInput.files[0];
+      const formData = new FormData();
+      formData.append("file", file, file.name);
+
+      uploadResults.textContent = "Predicting...";
+      try {
+        const resp = await fetch(API_URL, {
+          method: "POST",
+          body: formData,
+        });
+        const data = await resp.json();
+
+        // ----- Show nicely formatted probabilities instead of raw JSON -----
+        if (data.faces && data.faces.length > 0) {
+          let lines = [];
+          data.faces.forEach((face, idx) => {
+            const conf = (face.confidence * 100).toFixed(1);
+
+            lines.push(`Face ${idx + 1}: ${face.label} (${conf}%)`);
+
+            if (face.probabilities) {
+              lines.push("  Class probabilities:");
+              for (const [lbl, prob] of Object.entries(face.probabilities)) {
+                lines.push(`    - ${lbl}: ${(prob * 100).toFixed(1)}%`);
+              }
+            }
+            lines.push(""); // blank line between faces
+          });
+
+          uploadResults.textContent = lines.join("\n");
+        } else {
+          uploadResults.textContent = "No face detected.";
+        }
+
+
+        if (data.annotated_image_base64) {
+          uploadResultImg.src =
+            "data:image/jpeg;base64," + data.annotated_image_base64;
+        } else {
+          uploadResultImg.alt = "No annotated image received.";
+        }
+      } catch (err) {
+        uploadResults.textContent = "Error: " + err;
+      }
+    });
+
+    // ---------- Section 2: Webcam Realtime ----------
+
+    const video = document.getElementById("video");
+    const canvas = document.getElementById("canvas");
+    const realtimeResults = document.getElementById("realtimeResults");
+    const startCamBtn = document.getElementById("startCamBtn");
+    const stopCamBtn = document.getElementById("stopCamBtn");
+
+    const ctx = canvas.getContext("2d");
+    let streaming = false;
+    let stream = null;
+
+    async function setupCamera() {
+      stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      video.srcObject = stream;
+      return new Promise((resolve) => {
+        video.onloadedmetadata = () => {
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          resolve();
+        };
+      });
+    }
+
+    async function sendFrameLoop() {
+      if (!streaming) return;
+
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(
+        async (blob) => {
+          if (!blob || !streaming) {
+            if (streaming) {
+              requestAnimationFrame(sendFrameLoop);
+            }
+            return;
+          }
+          const formData = new FormData();
+          formData.append("file", blob, "frame.jpg");
+
+          try {
+            const resp = await fetch(API_URL, {
+              method: "POST",
+              body: formData,
+            });
+            const data = await resp.json();
+
+          // ----- Show nicely formatted probabilities instead of raw JSON -----
+          if (data.faces && data.faces.length > 0) {
+            let lines = [];
+            data.faces.forEach((face, idx) => {
+              const conf = (face.confidence * 100).toFixed(1);
+
+              lines.push(`Face ${idx + 1}: ${face.label} (${conf}%)`);
+
+              if (face.probabilities) {
+                lines.push("  Class probabilities:");
+                for (const [lbl, prob] of Object.entries(face.probabilities)) {
+                  lines.push(`    - ${lbl}: ${(prob * 100).toFixed(1)}%`);
+                }
+              }
+              lines.push(""); // blank line between faces
+            });
+
+            realtimeResults.textContent = lines.join("\n");
+          } else {
+            realtimeResults.textContent = "No face detected.";
+          }
+
+
+            // Draw server-annotated image back onto canvas
+            if (data.annotated_image_base64) {
+              const img = new Image();
+              img.onload = () => {
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+              };
+              img.src =
+                "data:image/jpeg;base64," + data.annotated_image_base64;
+            }
+          } catch (err) {
+            realtimeResults.textContent = "Error: " + err;
+          }
+
+          // Next frame
+          if (streaming) {
+            requestAnimationFrame(sendFrameLoop);
+          }
+        },
+        "image/jpeg",
+        0.8
+      );
+    }
+
+    startCamBtn.addEventListener("click", async () => {
+      if (streaming) return;
+      try {
+        await setupCamera();
+        streaming = true;
+        sendFrameLoop();
+      } catch (err) {
+        alert("Could not access camera: " + err);
+      }
+    });
+
+    stopCamBtn.addEventListener("click", () => {
+      streaming = false;
+      if (stream) {
+        const tracks = stream.getTracks();
+        tracks.forEach((t) => t.stop());
+      }
+      video.srcObject = null;
+    });
+  </script>
+</body>
+</html>

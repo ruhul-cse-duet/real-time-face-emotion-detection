@@ -1,86 +1,90 @@
-# Face Emotion Classification
+# 😃 Real-Time Face Emotion Detection (Streamlit + PyTorch)
 
-A modern, AI-powered web application for classifying Face Emotion images using deep learning. This application uses a custom ResNet CNN to classify images into five categories: ['Fear', 'Surprise', 'Angry', 'Sad', 'Happy']
+A full-stack **face emotion recognition system** that performs:
 
-![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)
-![Streamlit](https://img.shields.io/badge/Streamlit-1.28+-red.svg)
-![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-orange.svg)
-![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)
-
-## Live project link below
-https://face-emotion-classify.streamlit.app/
-
-## 🚀 Features
-
-- **AI-Powered Classification**: Custom ResNet CNN for persons faces emotion images
-- **Five Classes**: ['Fear', 'Surprise', 'Angry', 'Sad', 'Happy']
-- **Modern UI**: Beautiful, responsive interface with gradient backgrounds
-- **Docker Support**: Easy deployment with Docker and Docker Compose
-- **Real-time Prediction**: Fast inference with confidence scores
-- **Mobile Responsive**: Works on desktop, tablet, and mobile devices
-- 
-## Local Development
-
-```bash
-python -m venv .venv
-.venv\Scripts\activate  # or source .venv/bin/activate on macOS/Linux
-pip install -r requirements.txt
-streamlit run App.py
-```
-
-
-## Container Build & Run
-
-1. Build the image:
-   ```bash
-   docker build -t face-emotion-app .
-   ```
-2. Run the container:
-   ```bash
-   docker run -p 8501:8501 --name face-emotion face-emotion-app
-   ```
-3. Open http://localhost:8501 in your browser.
-
-If you need live code reloads during development, mount the repo as a volume:
-
-```bash
-docker run --rm -p 8501:8501 -v ${PWD}:/app face-emotion-app
-```
-
-## 📁 Project Structure
-
-```
-Lung and Colon Cancer Streamlit/
-├── App.py                       # Main Streamlit application
-├── requirements.txt             # Python dependencies
-├── Dockerfile                   # Docker configuration
-├── docker-compose.yml           # Docker Compose configuration
-├── README.md                    # Project documentation
-├── assets/
-│   └── style.css                # Modern CSS styling
-├── src/
-│   ├── custom_resnet.py         # Model loading and prediction
-├── models/
-│   └── resnet_Model.pth         # Legacy/custom CNN weights
-├── test_images/                 # Sample test images    
-│   
-└── Codes/
-    └── face-emotion-classification.ipynb # Prior training notebook
-```
-
-After pushing, enable GitHub Actions or the repository’s container registry if you need automated builds. Update `README.md` with the image name/tag once it exists on Docker Hub or GHCR.
-
-## 🔮 Future Enhancements
-
-- [ ] Support for more Bone fracture types
-- [ ] Integration with medical imaging systems
-- [ ] Batch processing capabilities
-- [ ] Advanced visualization tools
-- [ ] API endpoints for integration
-- [ ] Mobile app development
-- [ ] Multi-language support
+- **Real-time emotion detection** using your webcam  
+- **Image upload classification**  
+- **Bounding box detection** using OpenCV Haar Cascades  
+- **Emotion prediction** using a custom ResNet-inspired CNN model  
+- Beautiful, modern **Streamlit UI** with CSS styling  
+- Optional **FastAPI backend + Docker deployment**
 
 ---
-## Developer
-[Md Ruhul Amin](https://www.linkedin.com/in/ruhul-duet-cse/);  
-Email: ruhul.cse.duet@gmail.com
+
+## 🚀 Demo Screenshots
+
+### 🔹 Home Page  
+![Home Demo](assets/demo_home.png)
+
+### 🔹 Image Upload Prediction  
+![Upload Demo](assets/demo_upload.png)
+
+### 🔹 Real-Time Webcam Mode  
+![Camera Demo](assets/demo_camera.png)
+
+*(You can replace these with real screenshots from your app.)*
+
+---
+
+## 🎯 Features
+
+| Feature | Description |
+|--------|-------------|
+| 🧠 **Emotion Classification** | Happy, Sad, Angry, Fear, Surprise |
+| 👁️ **Face Detection** | Bounding boxes using Haar cascades |
+| 📷 **Real-time Webcam Mode** | Continuous detection from live camera |
+| 📁 **Image Upload Mode** | Upload JPG/PNG for prediction |
+| ⚡ **Fast & Lightweight** | Custom CNN (ResNet-inspired), runs on CPU or GPU |
+| 🎨 **Modern Streamlit UI** | Custom CSS, button navigation (no sidebar) |
+| 🐳 **Docker-ready** | Deploy anywhere using Docker |
+
+---
+
+## 🏗️ Tech Stack
+
+- **Python 3.10+**
+- **Streamlit** (front-end UI)
+- **PyTorch** (deep learning model)
+- **OpenCV** (face detection + drawing)
+- **Docker** (optional deployment)
+- **Haar Cascade** for face detection
+
+---
+
+## 📂 Project Structure
+
+real-time-face-emotion-detection\
+├── app\
+│ └── streamlit_app.py
+├── src\
+│ ├── custom_resnet.py # your CNN model + prediction_img\
+│ └── emotion_service.py # modular face detection + inference\
+├── model\
+│ └── resnet_Model.pth
+├── assets\
+│ ├── style.css\
+│ ├──[res10_300x300_ssd_iter_140000_fp16.caffemodel](assets/res10_300x300_ssd_iter_140000_fp16.caffemodel)\
+├── Dockerfile\
+├── requirements.txt\
+└── README.md
+
+
+---
+
+## 🛠️ Installation (Local Development)
+
+### 1️⃣ Clone the repository
+
+```bash
+git clone https://github.com/yourusername/real-time-face-emotion-detection.git
+cd real-time-face-emotion-detection
+```
+## Create environment & install dependencies
+pip install -r requirements.txt
+
+If using Anaconda:
+```
+conda create -n face-emotion python=3.12 -y
+conda activate face-emotion
+pip install -r requirements.txt
+```
