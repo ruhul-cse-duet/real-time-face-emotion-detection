@@ -20,7 +20,7 @@ A full-stack **face emotion recognition system** that performs:
 ![Upload Demo](assets/upload_img.png)
 
 ### 🔹 Real-Time Webcam Mode  
-![Camera Demo](assets/web camera.png)
+![Camera Demo](assets/web_camera.png)
 
 *(You can replace these with real screenshots from your app.)*
 
