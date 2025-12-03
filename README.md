@@ -14,13 +14,13 @@ A full-stack **face emotion recognition system** that performs:
 ## 🚀 Demo Screenshots
 
 ### 🔹 Home Page  
-![Home Demo](assets/demo_home.png)
+![Home Demo](assets/home.png)
 
 ### 🔹 Image Upload Prediction  
-![Upload Demo](assets/demo_upload.png)
+![Upload Demo](assets/upload.png)
 
 ### 🔹 Real-Time Webcam Mode  
-![Camera Demo](assets/demo_camera.png)
+![Camera Demo](assets/web_camera.png)
 
 *(You can replace these with real screenshots from your app.)*
 
