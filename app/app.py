@@ -13,7 +13,7 @@ sys.path.append(ROOT_DIR)
 from src.emotion_service import detect_and_classify_faces, device
 
 # ---------- ENV: local vs cloud ---------- #
-RUN_ENV = os.getenv("RUN_ENV", "local")  # "local" or "cloud"
+RUN_ENV = os.getenv("cloud", "local")  # "local" or "cloud"
 
 
 
