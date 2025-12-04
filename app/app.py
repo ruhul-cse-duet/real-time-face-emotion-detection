@@ -17,7 +17,8 @@ from streamlit_webrtc import (
     VideoProcessorBase,
 )
 
-# WebRTC STUN server config
+# ---------------- WebRTC config ---------------- #
+
 RTC_CONFIGURATION = RTCConfiguration(
     {
         "iceServers": [
@@ -26,25 +27,27 @@ RTC_CONFIGURATION = RTCConfiguration(
     }
 )
 
-# Add project ROOT to sys.path
+# ---------------- Project path & model import ---------------- #
+
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(ROOT_DIR)
 
-from src.emotion_service import detect_and_classify_faces, device
+from src.emotion_service import detect_and_classify_faces, device   # noqa: E402
 
-# ---------- Page config & CSS ---------- #
+
+# ---------------- Page config & CSS ---------------- #
 
 st.set_page_config(page_title="Face Emotion Detection", layout="wide")
 
-css_path = "assets/style.css"
+css_path = os.path.join("assets", "style.css")
 try:
     with open(css_path, "r", encoding="utf-8") as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 except FileNotFoundError:
-    pass  # app will still run without custom CSS
+    pass  # App will still run without custom CSS
 
 
-# ---------- Simple page state ---------- #
+# ---------------- Simple page state ---------------- #
 
 if "page" not in st.session_state:
     st.session_state["page"] = "home"
@@ -54,7 +57,7 @@ def set_page(p: str):
     st.session_state["page"] = p
 
 
-# ---------- Top navigation buttons (no sidebar) ---------- #
+# ---------------- Top nav buttons (no sidebar) ---------------- #
 
 col_nav1, col_nav2, col_nav3 = st.columns([1, 1, 1])
 with col_nav1:
@@ -70,21 +73,21 @@ with col_nav3:
 st.markdown("<hr>", unsafe_allow_html=True)
 
 
-# ---------- Helper: pretty print face results ---------- #
+# ---------------- Helper: pretty print face results ---------------- #
 
 def render_face_results(faces_data):
     if not faces_data:
         st.warning("No face detected.")
         return
 
-    for i, face in enumerate(faces_data):
+    for i, face in enumerate(faces_data, start=1):
         label = face["label"]
         conf = face["confidence"]
         summary = face["summary"]
         action = face["action"]
         probs = face["probabilities"]
 
-        st.markdown(f"### Face {i+1}")
+        st.markdown(f"### Face {i}")
         st.write(f"**Detected Emotion:** {label} ({conf*100:.2f}%)")
 
         if summary:
@@ -99,23 +102,33 @@ def render_face_results(faces_data):
         st.markdown("---")
 
 
-# ---------- WebRTC Video Processor ---------- #
+# ---------------- WebRTC Video Processor ---------------- #
 
 class EmotionProcessor(VideoProcessorBase):
+    """
+    Video processor used by streamlit-webrtc.
+    It runs in a separate thread and updates attributes
+    that we read from the Streamlit script.
+    """
+
     def __init__(self):
-        self.faces_data = []
+        self.faces_data = []        # current-frame detections
+        self.last_faces_data = []   # last non-empty detections
 
     def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
         # av.VideoFrame -> numpy BGR
         img_bgr = frame.to_ndarray(format="bgr24")
 
-        # Use model to detect faces + emotions
         annotated_bgr, faces_data = detect_and_classify_faces(img_bgr)
 
-        # Save for UI
+        # store current detections
         self.faces_data = faces_data
 
-        # back to VideoFrame
+        # if we detected something, remember it
+        if faces_data:
+            self.last_faces_data = faces_data
+
+        # back to VideoFrame for display
         return av.VideoFrame.from_ndarray(annotated_bgr, format="bgr24")
 
 
@@ -201,28 +214,54 @@ elif st.session_state["page"] == "camera":
 
     left, mid, right = st.columns([1, 2, 1])
 
+    # ---- Live stream widget ---- #
     with mid:
         st.markdown("#### Live Camera Stream")
         webrtc_ctx = webrtc_streamer(
             key="emotion-stream",
-            mode=WebRtcMode.SENDRECV,  # ✅ correct mode
+            mode=WebRtcMode.SENDRECV,
             rtc_configuration=RTC_CONFIGURATION,
             media_stream_constraints={"video": True, "audio": False},
             video_processor_factory=EmotionProcessor,
         )
 
+    # ---- Probabilities for all detected faces ---- #
     with mid:
-        st.markdown("#### Latest Detection")
+        st.markdown("#### Latest Detection (Probability Classifier)")
+
         if webrtc_ctx and webrtc_ctx.video_processor:
-            faces_data = webrtc_ctx.video_processor.faces_data
+            processor = webrtc_ctx.video_processor
+
+            # Prefer last non-empty detections (to avoid flicker)
+            faces_data = getattr(processor, "last_faces_data", None)
+            if not faces_data:
+                faces_data = getattr(processor, "faces_data", [])
+
             if faces_data:
-                render_face_results(faces_data)
-            else:
-                st.info("No face detected yet. Move closer to the camera 🙂")
+                for idx, face in enumerate(faces_data, start=1):
+                    label = face["label"]
+                    conf = face["confidence"]
+                    probs = face["probabilities"]
+
+                    with st.container():
+                        st.markdown(
+                            f"##### Face {idx}: `{label}` "
+                            f"({conf * 100:.2f}% confidence)"
+                        )
+
+                        for emo, prob in probs.items():
+                            st.progress(
+                                int(prob * 100),
+                                text=f"{emo}: {prob * 100:.1f}%",
+                            )
+
+                        st.markdown("---")
+            # else:
+            #     st.info("No face detected yet. Move closer to the camera 🙂")
         else:
             st.info(
                 "Camera is not running. Click **Start** in the video widget "
-                "above if it has a start button."
+                "above and allow camera permission."
             )
 
 # streamlit run app/app.py
