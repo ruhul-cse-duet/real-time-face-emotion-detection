@@ -1,21 +1,36 @@
+# app/app.py
+
+import os
+import sys
 import time
-import numpy as np
+
 import cv2
+import numpy as np
 import streamlit as st
 from PIL import Image
-import sys
-import os
 
-# Add ROOT directory to module search path
+import av
+from streamlit_webrtc import (
+    webrtc_streamer,
+    WebRtcMode,
+    RTCConfiguration,
+    VideoProcessorBase,
+)
+
+# WebRTC STUN server config
+RTC_CONFIGURATION = RTCConfiguration(
+    {
+        "iceServers": [
+            {"urls": ["stun:stun.l.google.com:19302"]},
+        ]
+    }
+)
+
+# Add project ROOT to sys.path
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(ROOT_DIR)
 
 from src.emotion_service import detect_and_classify_faces, device
-
-# ---------- ENV: local vs cloud ---------- #
-RUN_ENV = os.getenv("cloud", "local")  # "local" or "cloud"
-
-
 
 # ---------- Page config & CSS ---------- #
 
@@ -28,13 +43,16 @@ try:
 except FileNotFoundError:
     pass  # app will still run without custom CSS
 
+
 # ---------- Simple page state ---------- #
 
 if "page" not in st.session_state:
     st.session_state["page"] = "home"
 
-def set_page(p):
+
+def set_page(p: str):
     st.session_state["page"] = p
+
 
 # ---------- Top navigation buttons (no sidebar) ---------- #
 
@@ -50,6 +68,7 @@ with col_nav3:
         set_page("camera")
 
 st.markdown("<hr>", unsafe_allow_html=True)
+
 
 # ---------- Helper: pretty print face results ---------- #
 
@@ -78,6 +97,26 @@ def render_face_results(faces_data):
             st.progress(int(prob * 100), text=f"{emo}: {prob*100:.1f}%")
 
         st.markdown("---")
+
+
+# ---------- WebRTC Video Processor ---------- #
+
+class EmotionProcessor(VideoProcessorBase):
+    def __init__(self):
+        self.faces_data = []
+
+    def recv(self, frame: av.VideoFrame) -> av.VideoFrame:
+        # av.VideoFrame -> numpy BGR
+        img_bgr = frame.to_ndarray(format="bgr24")
+
+        # Use model to detect faces + emotions
+        annotated_bgr, faces_data = detect_and_classify_faces(img_bgr)
+
+        # Save for UI
+        self.faces_data = faces_data
+
+        # back to VideoFrame
+        return av.VideoFrame.from_ndarray(annotated_bgr, format="bgr24")
 
 
 # ===================== PAGES ===================== #
@@ -109,7 +148,7 @@ if st.session_state["page"] == "home":
     st.info(f"Running on device: **{device}**")
 
 
-# --------------- IMAGE UPLOAD ------------------------------------ #
+# ---------- IMAGE UPLOAD ---------- #
 elif st.session_state["page"] == "upload":
     st.header("📷 Image Upload Emotion Detection")
 
@@ -123,18 +162,18 @@ elif st.session_state["page"] == "upload":
 
         if st.button("Predict Emotion", type="primary"):
             with st.spinner("Running detection..."):
-                # PIL -> BGR
                 frame_rgb = np.array(pil_image)
                 frame_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
 
                 annotated_bgr, faces_data = detect_and_classify_faces(frame_bgr)
 
-                # 🔹 Reduce display size of image for nicer UI
                 h, w = annotated_bgr.shape[:2]
                 target_width = 480
                 scale = target_width / w
                 target_height = int(h * scale)
-                annotated_small = cv2.resize(annotated_bgr, (target_width, target_height))
+                annotated_small = cv2.resize(
+                    annotated_bgr, (target_width, target_height)
+                )
 
                 annotated_rgb = cv2.cvtColor(annotated_small, cv2.COLOR_BGR2RGB)
 
@@ -151,123 +190,39 @@ elif st.session_state["page"] == "upload":
         st.info("Please upload an image to begin.")
 
 
-# ---------------------- REAL-TIME CAMERA ------------------------------------ #
+# ---------- REAL-TIME CAMERA (WebRTC) ---------- #
 elif st.session_state["page"] == "camera":
     st.header("🎥 Real-Time Webcam Emotion Detection")
 
     st.write(
-        "Click **Start Camera** to begin live emotion detection. "
-        "The preview size is reduced for smoother performance."
+        "This mode uses your browser camera via WebRTC, "
+        "so it works both locally and on Streamlit Community Cloud."
     )
 
     left, mid, right = st.columns([1, 2, 1])
 
-    # ======================= CLOUD MODE (st.camera_input) ======================= #
-    if RUN_ENV.lower() == "cloud":
-        with mid:
-            st.info(
-                "Running in *cloud* mode (Streamlit Community Cloud). "
-                "Using browser camera snapshots instead of OpenCV VideoCapture."
-            )
-            cam_img = st.camera_input("Take a photo", key="cam_input")
+    with mid:
+        st.markdown("#### Live Camera Stream")
+        webrtc_ctx = webrtc_streamer(
+            key="emotion-stream",
+            mode=WebRtcMode.SENDRECV,  # ✅ correct mode
+            rtc_configuration=RTC_CONFIGURATION,
+            media_stream_constraints={"video": True, "audio": False},
+            video_processor_factory=EmotionProcessor,
+        )
 
-        if cam_img is not None:
-            pil_image = Image.open(cam_img).convert("RGB")
-
-            # Original image show
-            with mid:
-                st.image(pil_image, caption="Captured Frame", use_container_width=True)
-
-            # Run detection
-            with st.spinner("Detecting faces and emotions..."):
-                frame_rgb = np.array(pil_image)
-                frame_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
-                annotated_bgr, faces_data = detect_and_classify_faces(frame_bgr)
-                annotated_rgb = cv2.cvtColor(annotated_bgr, cv2.COLOR_BGR2RGB)
-
-            col1, col2, col3 = st.columns([1, 2, 1])
-            with col2:
-                st.image(
-                    annotated_rgb,
-                    caption="Annotated with Bounding Boxes",
-                    use_container_width=True,
-                )
-
-            with mid:
+    with mid:
+        st.markdown("#### Latest Detection")
+        if webrtc_ctx and webrtc_ctx.video_processor:
+            faces_data = webrtc_ctx.video_processor.faces_data
+            if faces_data:
                 render_face_results(faces_data)
-
-        else:
-            with mid:
-                st.info("Click **Take a photo** above to capture a frame.")
-
-    # ======================= LOCAL MODE (cv2.VideoCapture) ====================== #
-    else:
-        with mid:
-            start = st.button("Start Camera")
-            frame_placeholder = st.empty()
-            info_placeholder = st.empty()
-
-        if start:
-            cap = cv2.VideoCapture(0)  # local webcam
-
-            if not cap.isOpened():
-                with mid:
-                    st.error("Could not access camera.")
             else:
-                with mid:
-                    stop_button = st.button("Stop")
-
-                while True:
-                    ret, frame_bgr = cap.read()
-                    if not ret:
-                        with mid:
-                            st.error("Failed to grab frame from camera.")
-                        break
-
-                    annotated_bgr, faces_data = detect_and_classify_faces(frame_bgr)
-
-                    # Resize preview for smooth performance
-                    h, w = annotated_bgr.shape[:2]
-                    target_width = 580
-                    scale = target_width / w
-                    target_height = int(h * scale)
-                    annotated_small = cv2.resize(
-                        annotated_bgr, (target_width, target_height)
-                    )
-
-                    annotated_rgb = cv2.cvtColor(annotated_small, cv2.COLOR_BGR2RGB)
-
-                    with mid:
-                        frame_placeholder.image(
-                            annotated_rgb,
-                            channels="RGB",
-                            width=480,
-                        )
-
-                        if faces_data:
-                            face = faces_data[0]
-                            label = face["label"]
-                            conf = face["confidence"]
-                            probs = face["probabilities"]
-
-                            text = f"**Detected:** {label} ({conf*100:.2f}%)\n\n"
-                            for emo, prob in probs.items():
-                                text += f"- {emo}: {prob*100:.1f}%\n"
-                            info_placeholder.markdown(text)
-                        else:
-                            info_placeholder.info("No face detected.")
-
-                        if stop_button:
-                            break
-
-                    time.sleep(0.03)
-
-                cap.release()
-                with mid:
-                    frame_placeholder.empty()
-                    info_placeholder.empty()
-                    st.success("Camera stopped.")
-
-
+                st.info("No face detected yet. Move closer to the camera 🙂")
+        else:
+            st.info(
+                "Camera is not running. Click **Start** in the video widget "
+                "above if it has a start button."
+            )
 
 # streamlit run app/app.py
