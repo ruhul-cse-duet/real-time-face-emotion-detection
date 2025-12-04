@@ -1,4 +1,3 @@
-
 import time
 import numpy as np
 import cv2
@@ -12,6 +11,10 @@ ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(ROOT_DIR)
 
 from src.emotion_service import detect_and_classify_faces, device
+
+# ---------- ENV: local vs cloud ---------- #
+RUN_ENV = os.getenv("RUN_ENV", "local")  # "local" or "cloud"
+
 
 
 # ---------- Page config & CSS ---------- #
@@ -105,7 +108,8 @@ if st.session_state["page"] == "home":
     )
     st.info(f"Running on device: **{device}**")
 
-# ---------- IMAGE UPLOAD ---------- #
+
+# --------------- IMAGE UPLOAD ------------------------------------ #
 elif st.session_state["page"] == "upload":
     st.header("📷 Image Upload Emotion Detection")
 
@@ -146,7 +150,8 @@ elif st.session_state["page"] == "upload":
     else:
         st.info("Please upload an image to begin.")
 
-# ---------- REAL-TIME CAMERA ---------- #
+
+# ---------------------- REAL-TIME CAMERA ------------------------------------ #
 elif st.session_state["page"] == "camera":
     st.header("🎥 Real-Time Webcam Emotion Detection")
 
@@ -155,76 +160,114 @@ elif st.session_state["page"] == "camera":
         "The preview size is reduced for smoother performance."
     )
 
-    # ---------------- CENTER LAYOUT ---------------- #
     left, mid, right = st.columns([1, 2, 1])
 
-    with mid:
-        start = st.button("Start Camera")
-        frame_placeholder = st.empty()
-        info_placeholder = st.empty()
+    # ======================= CLOUD MODE (st.camera_input) ======================= #
+    if RUN_ENV.lower() == "cloud":
+        with mid:
+            st.info(
+                "Running in *cloud* mode (Streamlit Community Cloud). "
+                "Using browser camera snapshots instead of OpenCV VideoCapture."
+            )
+            cam_img = st.camera_input("Take a photo", key="cam_input")
 
-    if start:
-        cap = cv2.VideoCapture(0)
+        if cam_img is not None:
+            pil_image = Image.open(cam_img).convert("RGB")
 
-        if not cap.isOpened():
+            # Original image show
             with mid:
-                st.error("Could not access camera.")
+                st.image(pil_image, caption="Captured Frame", use_container_width=True)
+
+            # Run detection
+            with st.spinner("Detecting faces and emotions..."):
+                frame_rgb = np.array(pil_image)
+                frame_bgr = cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR)
+                annotated_bgr, faces_data = detect_and_classify_faces(frame_bgr)
+                annotated_rgb = cv2.cvtColor(annotated_bgr, cv2.COLOR_BGR2RGB)
+
+            col1, col2, col3 = st.columns([1, 2, 1])
+            with col2:
+                st.image(
+                    annotated_rgb,
+                    caption="Annotated with Bounding Boxes",
+                    use_container_width=True,
+                )
+
+            with mid:
+                render_face_results(faces_data)
+
         else:
             with mid:
-                stop_button = st.button("Stop")
+                st.info("Click **Take a photo** above to capture a frame.")
 
-            while True:
-                ret, frame_bgr = cap.read()
-                if not ret:
-                    with mid:
-                        st.error("Failed to grab frame from camera.")
-                    break
+    # ======================= LOCAL MODE (cv2.VideoCapture) ====================== #
+    else:
+        with mid:
+            start = st.button("Start Camera")
+            frame_placeholder = st.empty()
+            info_placeholder = st.empty()
 
-                # Face detect + classify
-                annotated_bgr, faces_data = detect_and_classify_faces(frame_bgr)
+        if start:
+            cap = cv2.VideoCapture(0)  # local webcam
 
-                # Resize preview for smooth performance
-                h, w = annotated_bgr.shape[:2]
-                target_width = 580
-                scale = target_width / w
-                target_height = int(h * scale)
-                annotated_small = cv2.resize(annotated_bgr, (target_width, target_height))
-
-                annotated_rgb = cv2.cvtColor(annotated_small, cv2.COLOR_BGR2RGB)
-
-                # ---------------- SHOW FRAME IN CENTER ---------------- #
+            if not cap.isOpened():
                 with mid:
-                    frame_placeholder.image(
-                        annotated_rgb,
-                        channels="RGB",
-                        width=480,     # fixed width → stable layout
-                    )
+                    st.error("Could not access camera.")
+            else:
+                with mid:
+                    stop_button = st.button("Stop")
 
-                    # Show summary (first face only)
-                    if faces_data:
-                        face = faces_data[0]
-                        label = face["label"]
-                        conf = face["confidence"]
-                        probs = face["probabilities"]
-
-                        text = f"**Detected:** {label} ({conf*100:.2f}%)\n\n"
-                        for emo, prob in probs.items():
-                            text += f"- {emo}: {prob*100:.1f}%\n"
-                        info_placeholder.markdown(text)
-                    else:
-                        info_placeholder.info("No face detected.")
-
-                    # Stop camera button
-                    if stop_button:
+                while True:
+                    ret, frame_bgr = cap.read()
+                    if not ret:
+                        with mid:
+                            st.error("Failed to grab frame from camera.")
                         break
 
-                time.sleep(0.03)
+                    annotated_bgr, faces_data = detect_and_classify_faces(frame_bgr)
 
-            cap.release()
-            with mid:
-                frame_placeholder.empty()
-                info_placeholder.empty()
-                st.success("Camera stopped.")
+                    # Resize preview for smooth performance
+                    h, w = annotated_bgr.shape[:2]
+                    target_width = 580
+                    scale = target_width / w
+                    target_height = int(h * scale)
+                    annotated_small = cv2.resize(
+                        annotated_bgr, (target_width, target_height)
+                    )
+
+                    annotated_rgb = cv2.cvtColor(annotated_small, cv2.COLOR_BGR2RGB)
+
+                    with mid:
+                        frame_placeholder.image(
+                            annotated_rgb,
+                            channels="RGB",
+                            width=480,
+                        )
+
+                        if faces_data:
+                            face = faces_data[0]
+                            label = face["label"]
+                            conf = face["confidence"]
+                            probs = face["probabilities"]
+
+                            text = f"**Detected:** {label} ({conf*100:.2f}%)\n\n"
+                            for emo, prob in probs.items():
+                                text += f"- {emo}: {prob*100:.1f}%\n"
+                            info_placeholder.markdown(text)
+                        else:
+                            info_placeholder.info("No face detected.")
+
+                        if stop_button:
+                            break
+
+                    time.sleep(0.03)
+
+                cap.release()
+                with mid:
+                    frame_placeholder.empty()
+                    info_placeholder.empty()
+                    st.success("Camera stopped.")
+
 
 
 # streamlit run app/app.py
