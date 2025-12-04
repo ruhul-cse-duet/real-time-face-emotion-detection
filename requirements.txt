@@ -8,5 +8,7 @@ uvicorn
 Pillow
 python-multipart==0.0.20
 streamlit-webrtc
+av
+
 # python 3.12.12
 
