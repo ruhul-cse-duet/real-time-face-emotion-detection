@@ -19,13 +19,22 @@ from streamlit_webrtc import (
 
 # ---------------- WebRTC config ---------------- #
 
-RTC_CONFIGURATION = RTCConfiguration(
-    {
-        "iceServers": [
-            {"urls": ["stun:stun.l.google.com:19302"]},
-        ]
-    }
-)
+# WebRTC needs STUN (and sometimes TURN) to traverse NAT.
+# Added a public TURN fallback to improve connection reliability.
+RTC_CONFIGURATION = RTCConfiguration({
+    "iceServers": [
+        {"urls": ["stun:stun.l.google.com:19302"]},
+        {
+            "urls": [
+                "turn:openrelay.metered.ca:80",
+                "turn:openrelay.metered.ca:443",
+                "turn:openrelay.metered.ca:80?transport=tcp",
+            ],
+            "username": "openrelayproject",
+            "credential": "openrelayproject",
+        },
+    ]
+})
 
 # ---------------- Project path & model import ---------------- #
 
